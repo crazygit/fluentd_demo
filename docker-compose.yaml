@@ -1,0 +1,75 @@
+version: '3'
+services:
+  httpd:
+    image: httpd
+    ports:
+      - "5000:80"
+    networks:
+      - webnet
+    depends_on:
+      - fluentd
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: "localhost:24224"
+        fluentd-retry-wait: '1s'
+        fluentd-max-retries: '10'
+        tag: docker.httpd
+
+  fluentd:
+    build: ./fluentd/
+    volumes:
+      - ./etc/:/fluentd/etc
+      - ./log/:/fluentd/log
+    ports:
+      - "24224:24224"
+      - "24224:24224/udp"
+    environment:
+      - FLUENTD_CONF=fluentd_docker_compose.conf
+    networks:
+      - webnet
+    depends_on:
+      - elasticsearch
+      - kibana
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.2.3
+    ports:
+      - "9200:9200"
+    networks:
+      - webnet
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - discovery.type=single-node
+      - cluster.name=docker-cluster
+      - bootstrap.memory_lock=true
+      - http.host=0.0.0.0
+      - transport.host=127.0.0.1
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana-oss:6.2.3
+    environment:
+      SERVER_NAME: kibana-server
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - webnet
+
+networks:
+  webnet:
+
+volumes:
+  es_data:
+    driver: local
